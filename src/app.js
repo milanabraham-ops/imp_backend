@@ -10,6 +10,15 @@ const errorHandler = require('./middleware/errorHandler')
 
 const app = express()
 
+// Render (like most PaaS platforms) puts exactly one reverse proxy in front of this process —
+// without this, Express ignores X-Forwarded-For entirely, so req.ip/req.secure would both reflect
+// the proxy itself, not the real client. That breaks two things silently: express-rate-limit keys
+// everyone behind the proxy as the same IP (and, as of v7+, refuses to start at all once it sees
+// X-Forwarded-For without a trust proxy setting — a real request would throw), and any per-IP
+// logic in the audit trail would record the proxy's address for every request. Harmless locally —
+// there's no proxy, so no X-Forwarded-For header ever arrives to trust in the first place.
+app.set('trust proxy', 1)
+
 // Every request gets its own child logger (req.log) carrying a correlation id, and one summary
 // line logged automatically on completion (method, path, status, duration) — this is what makes
 // "grep this one request's whole story" possible, instead of scattered, uncorrelated console
@@ -23,6 +32,15 @@ app.use(
       return id
     },
     autoLogging: { ignore: (req) => req.url === '/api/health' },
+    // pino-http's default req/res serializers log the full raw headers object — confirmed this
+    // means the live bearer access token and the refresh/CSRF session cookies get written out in
+    // full on every single authenticated request/response otherwise. Redacted rather than dropped
+    // entirely so the rest of the header (useful for debugging — content-type, origin, etc.) is
+    // still there.
+    redact: {
+      paths: ['req.headers.authorization', 'req.headers.cookie', 'res.headers["set-cookie"]'],
+      censor: '[redacted]',
+    },
   }),
 )
 
