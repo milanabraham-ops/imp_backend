@@ -9,7 +9,7 @@ const { deriveCsrfToken } = require('../middleware/csrf')
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_OAUTH_CLIENT_ID)
 
-// Per-account lockout — complements authRateLimit (per-IP, resets every minute) with a check that
+// Per-account lockout, complements authRateLimit (per-IP, resets every minute) with a check that
 // survives an attacker rotating IPs. 5 wrong passwords locks the account for 15 minutes; the
 // counter resets on any successful login.
 const MAX_FAILED_ATTEMPTS = 5
@@ -28,7 +28,7 @@ function toPublicUser(user) {
 
 // Starts (or renews) a session: sets the HttpOnly refresh cookie and returns the short-lived access
 // token + user payload + a csrfToken the frontend must echo back as a header on /auth/refresh and
-// /auth/logout (see middleware/csrf.js — it's derived from the refresh token itself, not a second
+// /auth/logout (see middleware/csrf.js, it's derived from the refresh token itself, not a second
 // cookie, specifically so it still works with frontend and backend on different domains). Every
 // place a session actually begins or rotates (login, Google sign-in, refresh) goes through this so
 // the cookie/csrfToken pairing can never drift out of sync.
@@ -45,7 +45,7 @@ function clearSessionCookies(res) {
 }
 
 // A brand-new device/browser logging in (login, Google sign-in) gets its own fresh Session
-// document — never reuses or touches any other device's.
+// document, never reuses or touches any other device's.
 function createSession(req, user) {
   return Session.create({
     userId: user._id,
@@ -105,7 +105,7 @@ exports.google = async (req, res, next) => {
     const payload = ticket.getPayload()
     if (!payload?.email) return res.status(401).json({ error: 'Invalid Google credential' })
 
-    // Google sign-in never creates an account on its own — only an admin-added user (any
+    // Google sign-in never creates an account on its own, only an admin-added user (any
     // authProvider) can sign in this way, and only for the exact email an admin added.
     let user = await User.findOne({ googleId: payload.sub })
     if (!user) {
@@ -129,7 +129,7 @@ exports.google = async (req, res, next) => {
 const REFRESH_GRACE_MS = 30 * 1000
 
 // Reads the HttpOnly refresh cookie, verifies it, and looks up the specific Session it names
-// (`sid`) rather than a shared per-user counter — the session being revoked/gone (or missing/
+// (`sid`) rather than a shared per-user counter, the session being revoked/gone (or missing/
 // mismatched entirely) means this device's session was deliberately ended, or the token belongs to
 // someone else: rejected outright either way. A tokenVersion that's exactly one behind current,
 // within REFRESH_GRACE_MS of the rotation that moved it there, is treated as an ordinary same-
@@ -174,7 +174,7 @@ exports.refresh = async (req, res, next) => {
     }
 
     if (isCurrent) {
-      // Rotate — bump this session's own version so the token just presented can never be used
+      // Rotate, bump this session's own version so the token just presented can never be used
       // again outside the grace window above, then issue a fresh refresh token embedding the same
       // session id + new version. No other session's version is touched.
       session.previousTokenVersion = session.tokenVersion
@@ -182,7 +182,7 @@ exports.refresh = async (req, res, next) => {
       session.tokenVersion += 1
     }
     // Within grace: deliberately doesn't rotate again (that would just shift the race one
-    // generation later for whichever tab loses it) — every tab converges on the one current
+    // generation later for whichever tab loses it), every tab converges on the one current
     // version already established by whichever request won the race first.
     session.lastUsedAt = new Date()
     session.ip = req.ip || session.ip
@@ -194,7 +194,7 @@ exports.refresh = async (req, res, next) => {
   }
 }
 
-// Ends only THIS device's session (marks it revoked) — every other active session for the same
+// Ends only THIS device's session (marks it revoked), every other active session for the same
 // account is untouched, unlike the old shared-counter scheme this replaced.
 exports.logout = async (req, res, next) => {
   try {
@@ -204,7 +204,7 @@ exports.logout = async (req, res, next) => {
         const payload = verifyRefreshToken(token)
         if (payload.sid) await Session.updateOne({ _id: payload.sid }, { revokedAt: new Date() })
       } catch {
-        // Already invalid/expired — nothing to invalidate, still clear cookies below.
+        // Already invalid/expired, nothing to invalidate, still clear cookies below.
       }
     }
     clearSessionCookies(res)
@@ -214,7 +214,7 @@ exports.logout = async (req, res, next) => {
   }
 }
 
-// Every session for this account, most-recently-used first — includes revoked ones? No: only
+// Every session for this account, most-recently-used first, includes revoked ones? No: only
 // active sessions are meaningful to show someone deciding what to sign out of. `current` marks
 // whichever one the request's own refresh cookie names, so the frontend can label it and exclude
 // it from "revoke" actions that only make sense for OTHER devices.
@@ -226,7 +226,7 @@ exports.sessions = async (req, res, next) => {
       try {
         currentSid = verifyRefreshToken(token).sid || null
       } catch {
-        // Ignore — just means nothing gets marked "current" below.
+        // Ignore, just means nothing gets marked "current" below.
       }
     }
 
@@ -246,7 +246,7 @@ exports.sessions = async (req, res, next) => {
   }
 }
 
-// Revokes one specific OTHER device's session — scoped to req.user's own sessions only, so
+// Revokes one specific OTHER device's session, scoped to req.user's own sessions only, so
 // nobody can end a session belonging to a different account by guessing its id. Revoking the
 // CURRENT session here is refused (that's what /auth/logout is for, and it also clears this
 // browser's own cookies, which this endpoint doesn't).
@@ -274,7 +274,7 @@ exports.revokeSession = async (req, res, next) => {
   }
 }
 
-// "Log out everywhere else" — every active session for this account except whichever one the
+// "Log out everywhere else", every active session for this account except whichever one the
 // current request's own refresh cookie names.
 exports.revokeOtherSessions = async (req, res, next) => {
   try {
@@ -307,7 +307,7 @@ exports.me = async (req, res, next) => {
   }
 }
 
-// Only path off the forced mustChangePassword state — requires the current password too (not
+// Only path off the forced mustChangePassword state, requires the current password too (not
 // just a valid session token) so a compromised/left-open session can't silently take over the
 // account by changing the password without knowing it.
 exports.changePassword = async (req, res, next) => {
@@ -332,14 +332,14 @@ exports.changePassword = async (req, res, next) => {
       }
     }
 
-    // Most-recent-first, capped at the last 5 — enough to block "cycle back to what I just had"
+    // Most-recent-first, capped at the last 5, enough to block "cycle back to what I just had"
     // without keeping an unbounded history of a user's password hashes forever.
     user.previousPasswordHashes = [user.passwordHash, ...user.previousPasswordHashes].slice(0, 5)
     user.passwordHash = await bcrypt.hash(newPassword, 10)
     user.mustChangePassword = false
     await user.save()
 
-    // A password change should end every session on this account, on every device — revoke them
+    // A password change should end every session on this account, on every device, revoke them
     // all, then issue a brand-new one for the current request right below.
     await Session.updateMany({ userId: user._id, revokedAt: null }, { revokedAt: new Date() })
     const session = await createSession(req, user)

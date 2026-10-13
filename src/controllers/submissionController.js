@@ -20,13 +20,13 @@ const XLSX = require('xlsx')
 // Specialist/QA only ever act on tracking fields of records that already exist.
 const OWNER_ROLES = ['poc', 'admin']
 // QA can also pick up and perform configuration work themselves (same fields as specialist),
-// in addition to their own verification/onboarding sign-off — specialist cannot do QA's part.
+// in addition to their own verification/onboarding sign-off, specialist cannot do QA's part.
 // Account Onboarded belongs to whoever is actually doing the account at the time (specialist
-// while configuring, QA during review), not just QA — so both can set it.
-// Integration work (hooking a location's PMS up to the phone system) has no specialist/QA split —
+// while configuring, QA during review), not just QA, so both can set it.
+// Integration work (hooking a location's PMS up to the phone system) has no specialist/QA split ,
 // anyone but a POC can pick one up, so both roles get the same two fields. forwardingNumbers and
 // forwardingNumberRequired are here too (not gated like the rest) purely so specialist/qa can reach
-// them through this same PATCH — a POC already can, since neither is ever stripped as a tracking
+// them through this same PATCH; a POC already can, since neither is ever stripped as a tracking
 // field for them (see stripTrackingFields) and admin gets everything regardless.
 const TRACKING_FIELDS_BY_ROLE = {
   specialist: [
@@ -55,7 +55,7 @@ const TRACKING_FIELDS_BY_ROLE = {
 const MANUAL_TRACKING_FIELDS = ['accountOnboarded', 'configurationStatus', 'implementationSpecialist']
 
 // A "CS Voicestack" environment is always already wired to CareStack directly (see FormWizard's
-// own environment-change effect, which forces pms to 'CareStack' the moment it's selected) — it
+// own environment-change effect, which forces pms to 'CareStack' the moment it's selected), it
 // never needs a custom integration ticket. Any other environment does, once a PMS is actually
 // specified (nothing to integrate yet if that's still blank).
 function needsIntegration(data) {
@@ -64,7 +64,7 @@ function needsIntegration(data) {
   return environment !== 'cs voicestack' && Boolean(pms)
 }
 
-// Account Onboarded is a property of the client account as a whole, not each individual location —
+// Account Onboarded is a property of the client account as a whole, not each individual location ,
 // once any location in a group has been closed out, the account is onboarded for good. So a new
 // location added afterward should immediately show Closed too, instead of starting blank.
 async function inheritOnboardedStatus(submission, groupId) {
@@ -79,11 +79,11 @@ async function inheritOnboardedStatus(submission, groupId) {
   await setAccountOnboarded(submission, 'Closed')
 }
 
-// Fields nobody should ever be able to set through this general PATCH/POST, no matter the role —
+// Fields nobody should ever be able to set through this general PATCH/POST, no matter the role ,
 // stripped here (ahead of fieldsForRole) so this applies uniformly, admin included, rather than
 // needing every TRACKING_FIELDS_BY_ROLE list to know to exclude them. Shared by create() too, so
 // `group` (which create() DOES read off the stripped body, to attach a new location to a group at
-// creation time) deliberately isn't in this list — update() strips it separately below, since
+// creation time) deliberately isn't in this list, update() strips it separately below, since
 // there's no "reassign to a different group" feature and it should never be settable there.
 //
 // Two kinds here: Chat-message-only fields never persisted to the Submission document at all, and
@@ -92,8 +92,8 @@ async function inheritOnboardedStatus(submission, groupId) {
 // this same controller, the audit-derived lastActivity*/lastPocEdit* snapshots, and Mongoose's own
 // __v). Because the frontend wizard resends its whole cached copy of the submission on every save
 // rather than just a diff, any of these left un-stripped would silently roll back to whatever
-// stale value the client loaded — invisibly overwriting e.g. a QA checklist someone else filled
-// in since, or a new comment. forwardingNumbers is NOT in this list — it's a plain editable field
+// stale value the client loaded, invisibly overwriting e.g. a QA checklist someone else filled
+// in since, or a new comment. forwardingNumbers is NOT in this list, it's a plain editable field
 // like any other, just also reachable by specialist/qa via TRACKING_FIELDS_BY_ROLE above.
 function stripProtectedFields(body) {
   const {
@@ -126,11 +126,11 @@ function stripProtectedFields(body) {
   return rest
 }
 
-// A POC never touches anything in the tracking domain — not just the 4 status/assignment fields,
+// A POC never touches anything in the tracking domain, not just the 4 status/assignment fields,
 // but the QA-only ones too (qaChecklist, statusBeforeHold), and the integration ones, since a POC
 // resending their stale cached copy of any of these would silently blow away work someone else has
 // done in the meantime. A POC CAN still edit the actual pms/serverAccess fields that feed
-// needsIntegration() below — those are ordinary setup data, just read (never written) by this file.
+// needsIntegration() below, those are ordinary setup data, just read (never written) by this file.
 function stripTrackingFields(body) {
   const {
     accountOnboarded: _accountOnboarded,
@@ -149,7 +149,7 @@ function stripTrackingFields(body) {
 // What a given role is allowed to change on an existing submission via PATCH.
 // poc: everything except the 3 tracking fields (those are set by specialist/qa/admin instead).
 // admin: everything, including tracking fields.
-// specialist / qa: ONLY their own tracking field(s) — never the client's actual setup data.
+// specialist / qa: ONLY their own tracking field(s), never the client's actual setup data.
 function fieldsForRole(role, body) {
   const base = stripProtectedFields(body)
   if (role === 'admin') return base
@@ -167,7 +167,7 @@ function isMineName(fieldValue, name) {
 }
 
 // Once a submission has reached QA (in QA, paused mid-QA-review, or already Completed by QA),
-// the QA agent is the active owner for status/onboarded edits — including recheck/handover on a
+// the QA agent is the active owner for status/onboarded edits, including recheck/handover on a
 // Completed one, which are QA actions too. Otherwise it's still the specialist's.
 function isInQaDomain(submission) {
   if (statusEquals(submission.configurationStatus, 'QA') || statusEquals(submission.configurationStatus, 'Completed')) return true
@@ -178,9 +178,9 @@ function activeOwnerName(submission) {
   return isInQaDomain(submission) ? submission.qaAgent : submission.implementationSpecialist
 }
 
-// Once someone has taken a task, only they (or an admin) can touch it — reassign/release who
+// Once someone has taken a task, only they (or an admin) can touch it, reassign/release who
 // owns it, or change its status/onboarded fields. Admin has full drag/edit rights across the
-// whole board by design, same as the kanban UI's ownership gate — enforced here too since the
+// whole board by design, same as the kanban UI's ownership gate, enforced here too since the
 // UI-only gate can't stop a direct API call. Not yet taken by anyone means there's nothing to
 // protect, so the take-over action itself (claiming an unassigned submission) is unaffected.
 function stripForeignOwnershipEdits(submission, updates, requesterName, requesterRole) {
@@ -198,7 +198,7 @@ function stripForeignOwnershipEdits(submission, updates, requesterName, requeste
   }
 
   const owner = activeOwnerName(submission)
-  // Once a submission has been handed to QA, only qa/admin may ever move it further — never
+  // Once a submission has been handed to QA, only qa/admin may ever move it further, never
   // specialist, even if nobody has actually claimed the QA review yet (owner blank). The
   // ownership-by-name check below only narrows *which* qa/admin once someone has claimed it; it
   // was never meant to let a specialist jump straight to Completed just because it's unclaimed.
@@ -212,7 +212,7 @@ function stripForeignOwnershipEdits(submission, updates, requesterName, requeste
     delete out.statusBeforeHold
   }
 
-  // Integration is its own independent workflow with its own owner — same "only the current
+  // Integration is its own independent workflow with its own owner, same "only the current
   // owner may touch it" rule, entirely separate from configurationStatus/qaAgent above.
   if (out.integrationAgent !== undefined && submission.integrationAgent && !isMineName(submission.integrationAgent, requesterName)) {
     delete out.integrationAgent
@@ -223,7 +223,7 @@ function stripForeignOwnershipEdits(submission, updates, requesterName, requeste
   return out
 }
 
-// Once an integration ticket exists, pms is locked to whoever originally submitted the request —
+// Once an integration ticket exists, pms is locked to whoever originally submitted the request,
 // including admin, unlike every other ownership rule in this file (see the early admin return
 // above). Integration work may already be underway against the current PMS value; letting anyone
 // else change it later would silently relabel that in-flight ticket with no record of what it
@@ -240,7 +240,7 @@ function submissionLabel(submission) {
   return `${submission.clientName || 'Untitled'} - ${submission.locationName || 'Untitled location'}`
 }
 
-// One number per line — keeps the first occurrence of each (by digits only, via
+// One number per line, keeps the first occurrence of each (by digits only, via
 // normalizePhoneNumber) and drops any later line that's the same number in a different format.
 function dedupeForwardingNumbers(text) {
   const seen = new Set()
@@ -270,12 +270,12 @@ function sortKeysDeep(value) {
   return value
 }
 
-// Order-independent equality for "did this field actually change" — a plain JSON.stringify
+// Order-independent equality for "did this field actually change", a plain JSON.stringify
 // comparison is sensitive to object key order, which a Mongoose subdocument can drift on across
 // saves (its live in-memory order vs. one recast from a client's JSON-round-tripped resend) even
 // when nothing meaningful changed. JSON round-tripping first turns Mongoose documents/ObjectIds/
 // Dates into plain JSON-safe values (what toJSON/toObject would produce); sortKeysDeep then makes
-// key order a non-issue. Array element order is preserved (and does matter — e.g. ring group order).
+// key order a non-issue. Array element order is preserved (and does matter, e.g. ring group order).
 function stableSerialize(value) {
   const plain = value === undefined ? null : JSON.parse(JSON.stringify(value))
   return JSON.stringify(sortKeysDeep(plain))
@@ -294,7 +294,7 @@ const TRACKED_FIELDS = new Set([
   'integrationStatus',
   'integrationAgent',
 ])
-// Real PMS login credentials, encrypted at rest — must never land in the audit log even as a
+// Real PMS login credentials, encrypted at rest, must never land in the audit log even as a
 // "before/after" value, so only the fact that it changed is recorded.
 const REDACTED_FIELDS = new Set(['serverAccess'])
 
@@ -317,7 +317,7 @@ function describeStatusChange({ prev, next, isRecheck, hasQaHandoffMessage, subm
   return `Changed configuration status from ${prevLabel} to ${next || 'Not Started'}`
 }
 
-// Turns one PATCH's before/after values into one-or-more human-readable audit entries — a
+// Turns one PATCH's before/after values into one-or-more human-readable audit entries, a
 // take-over/reassignment, a status or onboarding change, and/or a single rolled-up entry for
 // whatever actual setup-data fields the requester also touched (so an edit to a dozen form
 // fields is one log line, not a dozen).
@@ -398,7 +398,7 @@ function buildSubmissionAuditEntries({ before, submission, req }) {
   }
 
   // Everything else the requester touched is the actual setup data (a POC editing their own
-  // form, or an admin editing on their behalf) — never a tracking field, since those are always
+  // form, or an admin editing on their behalf), never a tracking field, since those are always
   // one of the cases above already.
   const dataFields = changedKeys.filter((k) => !TRACKED_FIELDS.has(k) && !SILENT_FIELDS.has(k))
   if (dataFields.length) {
@@ -478,7 +478,7 @@ exports.create = async (req, res, next) => {
       req.log.error({ err, submissionId: submission._id }, 'Failed to send new-request Chat notification')
     })
 
-    // POC's own edited message to their client-facing space — optional (only sent if they
+    // POC's own edited message to their client-facing space, optional (only sent if they
     // actually wrote/kept one), separate from the fixed bot message to the QA/specialist group.
     if (req.body.pocMessage && req.body.pocMessage.trim()) {
       postToPocGroup(req.body.pocMessage.trim()).catch((err) => {
@@ -494,11 +494,11 @@ exports.create = async (req, res, next) => {
   }
 }
 
-// Only standalone (non-grouped) submissions — locations that belong to a multi-location group
+// Only standalone (non-grouped) submissions, locations that belong to a multi-location group
 // are listed via GET /api/groups/:id instead, so they aren't double-counted on the dashboard.
-// Specialist/QA/Admin aren't scoped to "their own" — they need visibility across every account.
+// Specialist/QA/Admin aren't scoped to "their own", they need visibility across every account.
 //
-// Pagination is opt-in (page/pageSize query params) — the kanban boards (Pipeline/Dashboard/
+// Pagination is opt-in (page/pageSize query params), the kanban boards (Pipeline/Dashboard/
 // Integrations) need every card in one response to bucket them into columns client-side, so they
 // keep calling this with no params and get the exact same flat array as before. A future
 // non-kanban consumer (or a very large account) can ask for a page and gets back
@@ -541,7 +541,7 @@ exports.getById = async (req, res, next) => {
   }
 }
 
-// Manual recovery for a persisted syncIssues entry (see models/Submission.js) — re-runs
+// Manual recovery for a persisted syncIssues entry (see models/Submission.js), re-runs
 // updateSubmissionRow, which is a full, idempotent "make the Sheet row match Mongo" write rather
 // than trying to replay whatever specific operation originally failed (append/setManualField/
 // setCompletionInfo). withSyncTracking (see services/sheetSync.js) clears the 'sheets' issue on
@@ -559,7 +559,7 @@ exports.retrySync = async (req, res, next) => {
       return res.status(502).json({ error: `Sync still failing: ${err.message}` })
     }
 
-    // Re-fetch rather than reuse the in-memory `submission` — withSyncTracking already cleared
+    // Re-fetch rather than reuse the in-memory `submission`, withSyncTracking already cleared
     // syncIssues in the database on that successful call above, but this in-memory copy was
     // loaded before that and would otherwise still show the stale, now-resolved entry.
     const refreshed = await Submission.findById(submission._id)
@@ -579,10 +579,10 @@ exports.update = async (req, res, next) => {
 
     let updates = stripForeignOwnershipEdits(submission, fieldsForRole(req.user.role, req.body), req.user.name, req.user.role)
     updates = stripLockedPmsEdit(submission, updates, req.user._id)
-    // No "move to a different group" feature exists — group is only ever set at creation. Stripped
+    // No "move to a different group" feature exists, group is only ever set at creation. Stripped
     // here rather than in stripProtectedFields since create() needs that same field to survive.
     delete updates.group
-    // One number per line, typed in by whoever notices it — de-duplicated by digits only (see
+    // One number per line, typed in by whoever notices it, de-duplicated by digits only (see
     // utils/phoneNumber.js) so the same number typed in two different formats on separate lines
     // (by the same person, or two different people editing around the same time) doesn't end up
     // listed twice; first occurrence's formatting wins.
@@ -593,6 +593,19 @@ exports.update = async (req, res, next) => {
       return res.status(403).json({ error: 'You are not allowed to edit this' })
     }
 
+    // A review with any item still flagged error/clarification isn't actually done, completing it
+    // anyway would silently drop those flags on the floor instead of sending them back to get
+    // fixed. Checked against whatever checklist this same request is saving (the normal case, QA's
+    // own "Mark Complete" always resends its current checklist alongside the status) or, failing
+    // that, whatever's already on the submission, never against the client's claim alone.
+    if (normalizeStatus(updates.configurationStatus) === 'COMPLETED') {
+      const effectiveChecklist = updates.qaChecklist !== undefined ? updates.qaChecklist : submission.qaChecklist
+      const hasUnresolvedFlags = (effectiveChecklist || []).some((i) => i.status === 'error' || i.status === 'clarification')
+      if (hasUnresolvedFlags) {
+        return res.status(400).json({ error: 'This review still has unresolved errors/clarifications. It needs another look before it can be completed.' })
+      }
+    }
+
     const before = {}
     for (const key of Object.keys(updates)) before[key] = submission[key]
 
@@ -601,7 +614,7 @@ exports.update = async (req, res, next) => {
     const entries = buildSubmissionAuditEntries({ before, submission, req })
 
     // A POC editing the actual setup data (as opposed to a tracking field, which a POC can't
-    // touch at all — see fieldsForRole) is the one edit specialist/QA/admin need to hear about,
+    // touch at all, see fieldsForRole) is the one edit specialist/QA/admin need to hear about,
     // since it can invalidate work already in progress. Stamped alongside the edit itself (one
     // save, not two) so the notification poll has both a timestamp and a one-line summary to show.
     if (req.user.role === 'poc') {
@@ -613,7 +626,7 @@ exports.update = async (req, res, next) => {
     }
 
     // A PMS added (or the environment changed away from CS Voicestack) via an edit qualifies this
-    // submission for an integration ticket just as much as one specified at creation — auto-start
+    // submission for an integration ticket just as much as one specified at creation, auto-start
     // it the same way, never something anyone has to remember to do by hand.
     if (!submission.integrationTicketCreatedAt && needsIntegration(submission)) {
       submission.integrationStatus = 'Needle Request (OneApi Cred)'
@@ -624,7 +637,7 @@ exports.update = async (req, res, next) => {
       })
     }
 
-    // Reaching Completed is the one integration-status change worth its own timestamp — drives
+    // Reaching Completed is the one integration-status change worth its own timestamp, drives
     // the "integration complete" notification to the POC, same pattern as qaHandoffAt below.
     if (updates.integrationStatus !== undefined && normalizeStatus(updates.integrationStatus) === 'COMPLETED') {
       submission.integrationCompletedAt = new Date()
@@ -647,14 +660,14 @@ exports.update = async (req, res, next) => {
     }
 
     // Both the QA-handoff note and the QA-result message are composed by whoever triggers the
-    // transition (specialist / QA) and only sent if they actually wrote one — a recheck reopening
+    // transition (specialist / QA) and only sent if they actually wrote one, a recheck reopening
     // back to QA (isRecheck) is silent, since the specialist already got the original handoff
     // message and doesn't need a second "ready for QA" ping for the same round.
     if (updates.configurationStatus !== undefined) {
       const newStatus = normalizeStatus(updates.configurationStatus)
       if (newStatus === 'QA' && !req.body.isRecheck && req.body.qaHandoffMessage && req.body.qaHandoffMessage.trim()) {
         postToQaGroup(req.body.qaHandoffMessage.trim()).catch((err) => req.log.error({ err, submissionId: submission._id }, 'Failed to notify QA team in Chat'))
-        // Drives the "new QA request" notification badge/sound — a genuine handoff only (see the
+        // Drives the "new QA request" notification badge/sound, a genuine handoff only (see the
         // qaHandoffMessage condition above), not QA resuming their own on-hold review or a recheck.
         submission.qaHandoffAt = new Date()
         submission.save().catch((err) => req.log.error({ err, submissionId: submission._id }, 'Failed to stamp qaHandoffAt'))
@@ -669,7 +682,7 @@ exports.update = async (req, res, next) => {
   }
 }
 
-// A deliberate, separate step from marking Completed — QA may want to hold off telling the
+// A deliberate, separate step from marking Completed, QA may want to hold off telling the
 // client right away, and may go through one or more recheck rounds first. QA/admin only, same
 // as the rest of the QA-side actions.
 exports.handover = async (req, res, next) => {
@@ -699,7 +712,7 @@ exports.handover = async (req, res, next) => {
     })
 
     // The message is composed with a literal "<users/all>" placeholder (see the frontend's
-    // startHandover) since the sender has no way to know the POC's Chat ID themselves — swapped
+    // startHandover) since the sender has no way to know the POC's Chat ID themselves, swapped
     // here for a real per-person mention when we have one on file for this specific submission's
     // owner, so the actual POC gets pinged instead of the whole space. Falls back to @all
     // untouched if that POC's Chat ID was never captured (see AdminUsers.jsx > Manage Access).
@@ -717,7 +730,7 @@ exports.handover = async (req, res, next) => {
   }
 }
 
-// Same staff roster GET /agents draws from — @-mentions only ever resolve against these roles,
+// Same staff roster GET /agents draws from, @-mentions only ever resolve against these roles,
 // never a POC (a POC mentioning another POC makes no sense here, and there's no cross-POC
 // visibility to support it anyway).
 const MENTIONABLE_ROLES = ['qa', 'specialist', 'admin']
@@ -725,7 +738,7 @@ const MENTIONABLE_ROLES = ['qa', 'specialist', 'admin']
 // Matches "@Name" substrings in a comment's text against the staff roster and returns the
 // matched users' ids, for the comment's `mentions` array. Sorted longest-name-first so e.g.
 // "@Jo Smith" doesn't get shadowed by a shorter "@Jo" also being on the roster. Best-effort and
-// intentionally simple (plain substring match, no markup) — matches the "don't over-engineer
+// intentionally simple (plain substring match, no markup), matches the "don't over-engineer
 // this part" scope of the feature.
 async function resolveMentions(text) {
   if (!text || !text.includes('@')) return []
@@ -736,7 +749,7 @@ async function resolveMentions(text) {
     .map((u) => u._id)
 }
 
-// A Sheets-comment-style discussion thread — anyone who can configure this account (specialist/
+// A Sheets-comment-style discussion thread, anyone who can configure this account (specialist/
 // qa/admin) or the POC who owns it can post; everyone with access to the submission can read the
 // whole log. Notification is thread-relative rather than tied to a fixed role: a staff post
 // always notifies the POC, while a POC's reply notifies whichever staff member posted most
@@ -786,7 +799,7 @@ exports.addComment = async (req, res, next) => {
   }
 }
 
-// A comment's own author can edit its text later (unrestricted — no time window, this is a
+// A comment's own author can edit its text later (unrestricted, no time window, this is a
 // low-stakes internal tool and nothing else in the codebase establishes an edit-window pattern
 // worth mirroring here). Re-resolves @-mentions against the new text same as addComment.
 exports.editComment = async (req, res, next) => {
@@ -823,7 +836,7 @@ exports.editComment = async (req, res, next) => {
   }
 }
 
-// The comment's own author OR an admin can delete it — same "admin can override anything"
+// The comment's own author OR an admin can delete it, same "admin can override anything"
 // pattern as the rest of this controller (see e.g. create()'s group ownership check).
 exports.deleteComment = async (req, res, next) => {
   try {
@@ -856,10 +869,10 @@ exports.deleteComment = async (req, res, next) => {
   }
 }
 
-// The primary template (frontend/public/phone-info-sheet-template.xlsx) is a two-tab workbook —
+// The primary template (frontend/public/phone-info-sheet-template.xlsx) is a two-tab workbook ,
 // Devices sheet, Agents sheet, see parseXlsxPhoneSheet below. A .csv upload is also still
 // accepted, laid out as the same two tables stacked vertically instead of tabs (a Devices header +
-// rows, one blank line, then an Agents header + rows) — no column ever shared between the two, and
+// rows, one blank line, then an Agents header + rows), no column ever shared between the two, and
 // no Type column needed since which table a row belongs to is just which block it's in.
 const PHONE_SHEET_DEVICE_HEADERS = {
   'device make': 'deviceMake',
@@ -901,12 +914,12 @@ function parsePhoneSheetCsv(buffer) {
   return { devices, agents }
 }
 
-// The .xlsx counterpart to the CSV template — a proper two-tab workbook (Devices sheet, Agents
+// The .xlsx counterpart to the CSV template, a proper two-tab workbook (Devices sheet, Agents
 // sheet) instead of the blank-line-separated stack, since a real spreadsheet already has tabs for
 // exactly this. Sheet lookup is by name (case-insensitive) with a positional fallback (1st/2nd
 // sheet) in case someone renamed a tab. sheet_to_json({header: 1}) returns each row as a plain
 // array of cells, same shape parseCsvLine produces, so it goes through the same mapTableRows the
-// CSV path uses — one set of header-name rules for both formats.
+// CSV path uses, one set of header-name rules for both formats.
 function parseXlsxPhoneSheet(buffer) {
   const workbook = XLSX.read(buffer, { type: 'buffer' })
   const findSheet = (name, fallbackIndex) => {
@@ -925,7 +938,7 @@ function parsePhoneSheetFile(file) {
   return isXlsx ? parseXlsxPhoneSheet(file.buffer) : parsePhoneSheetCsv(file.buffer)
 }
 
-// Test feature — stateless, no submission id needed: lets the wizard parse the combined phone
+// Test feature, stateless, no submission id needed: lets the wizard parse the combined phone
 // sheet (CSV or XLSX) before the location exists yet (staged client-side like any other Step 6
 // field, submitted with the rest on Submit). Nothing saved here, just the same parsing
 // uploadPhoneSheet below uses on an existing submission.
@@ -938,7 +951,7 @@ exports.parsePhoneSheet = async (req, res, next) => {
   }
 }
 
-// Test feature — the same upload (CSV or XLSX) for a submission that already exists, parsed and
+// Test feature, the same upload (CSV or XLSX) for a submission that already exists, parsed and
 // saved in one step. A full replacement of both arrays (not merged with what's already there),
 // same "upload is a fresh snapshot" semantics as re-uploading a corrected file.
 exports.uploadPhoneSheet = async (req, res, next) => {

@@ -9,7 +9,7 @@ const { z } = require('zod')
 const createSubmissionSchema = z
   .object({
     // A plain string can never be interpreted as a Mongo query operator ({$ne: null} etc), so
-    // this alone closes the injection path — it doesn't need to also match the ObjectId format
+    // this alone closes the injection path, it doesn't need to also match the ObjectId format
     // (an invalid-format string still fails safely later via Mongoose's CastError handling).
     group: z.string().optional(),
     clientName: z.string().trim().min(1, 'Client name is required'),
@@ -21,7 +21,7 @@ const createSubmissionSchema = z
   .passthrough()
 
 // update() is reached by every role (poc/specialist/qa/admin), each already restricted to their
-// own allowed field subset by fieldsForRole() — this just makes sure that whichever of these
+// own allowed field subset by fieldsForRole(), this just makes sure that whichever of these
 // tracking fields IS present is a plain string, not an injected object, without asserting exact
 // casing/values (several call sites intentionally tolerate mixed case, e.g. "QA" vs "qa").
 const updateSubmissionSchema = z
@@ -39,7 +39,7 @@ const updateSubmissionSchema = z
 
 const addCommentSchema = z.object({
   text: z.string().trim().min(1, 'Comment text is required').max(2000, 'Comment is too long'),
-  // Which review section this comment is scoped to (see SubmissionDetailSections) — optional,
+  // Which review section this comment is scoped to (see SubmissionDetailSections), optional,
   // the general thread posts with no section at all.
   section: z.string().trim().min(1).max(200).optional(),
 })
