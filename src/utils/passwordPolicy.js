@@ -28,7 +28,7 @@ function validatePassword(password) {
   if (!/[A-Z]/.test(password)) return 'Password must include an uppercase letter'
   if (!/[0-9]/.test(password)) return 'Password must include a number'
   if (!/[^a-zA-Z0-9]/.test(password)) return 'Password must include a special character'
-  if (COMMON_PASSWORDS.includes(password.toLowerCase())) return 'That password is too common — please choose something less guessable'
+  if (COMMON_PASSWORDS.includes(password.toLowerCase())) return 'That password is too common, please choose something less guessable'
   return null
 }
 

@@ -9,7 +9,7 @@ const Group = require('../models/Group')
 // actually reads.
 const SUBMISSION_FIELDS =
   'clientName locationName poc createdAt qaHandoffAt pocHandoverAt lastPocEditAt lastPocEditSummary ' +
-  'integrationTicketCreatedAt pms integrationCompletedAt comments.notifyUserId comments.mentions comments.createdAt'
+  'integrationTicketCreatedAt pms integrationCompletedAt comments.notifyUserId comments.mentions comments.createdAt comments.section'
 
 exports.feed = async (req, res, next) => {
   try {

@@ -166,7 +166,7 @@ exports.export = async (req, res, next) => {
     }
     if (total > logs.length) {
       res.write(
-        csvRow(['', '', '', '', '', `Export truncated — showing the first ${logs.length} of ${total} matching entries.`]),
+        csvRow(['', '', '', '', '', `Export truncated. Showing the first ${logs.length} of ${total} matching entries.`]),
       )
     }
     res.end()

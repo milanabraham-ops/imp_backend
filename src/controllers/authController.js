@@ -132,12 +132,20 @@ exports.google = async (req, res, next) => {
   }
 }
 
+// How long a just-rotated-out token is still accepted as a benign duplicate rather than a replay
+// attack. Short enough that a genuinely stolen old token is only usable in a narrow window, long
+// enough to cover realistic multi-tab races (network latency variance between tabs, a backgrounded
+// tab's throttled timer firing a few seconds late right as another tab also refreshes).
+const REFRESH_GRACE_MS = 30 * 1000
+
 // Reads the HttpOnly refresh cookie, verifies it, and looks up the specific Session it names
-// (`sid`) rather than a shared per-user counter — a mismatch on that session's own tokenVersion,
-// or the session being revoked/gone, means this exact token was already rotated away (or that one
-// device's session was deliberately ended) — rejecting it here is what makes reusing an old
-// refresh token fail instead of silently minting another valid session from it, without that
-// affecting any other device.
+// (`sid`) rather than a shared per-user counter — the session being revoked/gone (or missing/
+// mismatched entirely) means this device's session was deliberately ended, or the token belongs to
+// someone else: rejected outright either way. A tokenVersion that's exactly one behind current,
+// within REFRESH_GRACE_MS of the rotation that moved it there, is treated as an ordinary same-
+// browser multi-tab race instead: re-issued without rotating further, rather than killing the
+// session every other tab is still relying on. Anything older than that (two-plus generations
+// behind, or outside the grace window) is a genuine reuse and still gets rejected.
 exports.refresh = async (req, res, next) => {
   try {
     const token = req.cookies?.[REFRESH_COOKIE_NAME]
@@ -152,7 +160,7 @@ exports.refresh = async (req, res, next) => {
     }
 
     const session = payload.sid ? await Session.findById(payload.sid) : null
-    if (!session || session.revokedAt || session.tokenVersion !== payload.v || String(session.userId) !== payload.sub) {
+    if (!session || session.revokedAt || String(session.userId) !== payload.sub) {
       clearSessionCookies(res)
       return res.status(401).json({ error: 'Session no longer valid' })
     }
@@ -163,10 +171,29 @@ exports.refresh = async (req, res, next) => {
       return res.status(401).json({ error: 'Session no longer valid' })
     }
 
-    // Rotate — bump this session's own version so the token just presented can never be used
-    // again, then issue a fresh refresh token embedding the same session id + new version. No
-    // other session's version is touched.
-    session.tokenVersion += 1
+    const isCurrent = session.tokenVersion === payload.v
+    const isWithinGrace =
+      !isCurrent &&
+      session.previousTokenVersion === payload.v &&
+      session.previousTokenVersionExpiresAt &&
+      session.previousTokenVersionExpiresAt > new Date()
+
+    if (!isCurrent && !isWithinGrace) {
+      clearSessionCookies(res)
+      return res.status(401).json({ error: 'Session no longer valid' })
+    }
+
+    if (isCurrent) {
+      // Rotate — bump this session's own version so the token just presented can never be used
+      // again outside the grace window above, then issue a fresh refresh token embedding the same
+      // session id + new version. No other session's version is touched.
+      session.previousTokenVersion = session.tokenVersion
+      session.previousTokenVersionExpiresAt = new Date(Date.now() + REFRESH_GRACE_MS)
+      session.tokenVersion += 1
+    }
+    // Within grace: deliberately doesn't rotate again (that would just shift the race one
+    // generation later for whichever tab loses it) — every tab converges on the one current
+    // version already established by whichever request won the race first.
     session.lastUsedAt = new Date()
     session.ip = req.ip || session.ip
     await session.save()
@@ -311,7 +338,7 @@ exports.changePassword = async (req, res, next) => {
 
     for (const oldHash of user.previousPasswordHashes) {
       if (await bcrypt.compare(newPassword, oldHash)) {
-        return res.status(400).json({ error: "You've used that password before — please choose a new one" })
+        return res.status(400).json({ error: "You've used that password before, please choose a new one" })
       }
     }
 

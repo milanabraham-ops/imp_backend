@@ -39,6 +39,9 @@ const updateSubmissionSchema = z
 
 const addCommentSchema = z.object({
   text: z.string().trim().min(1, 'Comment text is required').max(2000, 'Comment is too long'),
+  // Which review section this comment is scoped to (see SubmissionDetailSections) — optional,
+  // the general thread posts with no section at all.
+  section: z.string().trim().min(1).max(200).optional(),
 })
 
 module.exports = { createSubmissionSchema, updateSubmissionSchema, addCommentSchema }

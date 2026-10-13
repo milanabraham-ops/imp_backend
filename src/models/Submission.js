@@ -63,6 +63,10 @@ const commentSchema = new Schema(
     authorName: { type: String, required: true },
     authorRole: { type: String, required: true },
     text: { type: String, required: true },
+    // Which review section (matched by its title, e.g. "Links, Attachments & PMS") this comment is
+    // about — null for a comment posted from the general thread at the bottom, not tied to any one
+    // section. Fixed at post time, same as authorRole; an edit only ever changes the text.
+    section: { type: String, default: null, trim: true },
     // Who this specific comment should notify — the POC when a staff member (specialist/qa/
     // admin) posts, or whichever staff member posted most recently when the POC replies. Kept
     // per-comment (not derived at read time) so the notification target is fixed at the moment

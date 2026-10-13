@@ -1,6 +1,9 @@
 const mongoose = require('mongoose')
 const Submission = require('../models/Submission')
 const Group = require('../models/Group')
+const User = require('../models/User')
+const AuditLog = require('../models/AuditLog')
+const AuditLogArchive = require('../models/AuditLogArchive')
 const { getBucket } = require('../config/gridfs')
 const { getClient: getDriveClient } = require('../config/googleDrive')
 const { isConfigured: isDriveConfigured } = require('../services/driveUpload')
@@ -21,8 +24,9 @@ function fileRefsOf(submission) {
 }
 
 // Wipes every account/location produced by test accounts — Mongo, the uploaded audio (GridFS),
-// the Google Drive backup copies, and the corresponding Sheet rows — without touching anything
-// created by a real account. Test accounts themselves are untouched so they stay reusable.
+// the Google Drive backup copies, the corresponding Sheet rows, and every audit log entry a test
+// account's own activity generated (live and archived) — without touching anything created by a
+// real account. Test accounts themselves are untouched so they stay reusable.
 exports.purge = async (req, res, next) => {
   try {
     const submissions = await Submission.find({ isTestData: true })
@@ -60,7 +64,21 @@ exports.purge = async (req, res, next) => {
     const { deletedCount: submissionsDeleted } = await Submission.deleteMany({ isTestData: true })
     const { deletedCount: groupsDeleted } = await Group.deleteMany({ isTestData: true })
 
-    res.json({ submissionsDeleted, groupsDeleted, filesDeleted, driveFilesDeleted })
+    // Unlike pruneOldAuditLogs' retention sweep (which archives everything first — that's real
+    // audit trail, kept indefinitely on principle), a test account's own activity log has no
+    // lasting value once its data is gone, so this is a genuine delete, live AND archived — not
+    // an automatic side effect of that job, a deliberate choice specific to this purge action.
+    const testUserIds = await User.find({ isTestAccount: true }).distinct('_id')
+    const { deletedCount: auditLogsDeleted } = await AuditLog.deleteMany({ actorId: { $in: testUserIds } })
+    const { deletedCount: auditLogArchivesDeleted } = await AuditLogArchive.deleteMany({ actorId: { $in: testUserIds } })
+
+    res.json({
+      submissionsDeleted,
+      groupsDeleted,
+      filesDeleted,
+      driveFilesDeleted,
+      auditLogsDeleted: auditLogsDeleted + auditLogArchivesDeleted,
+    })
   } catch (err) {
     next(err)
   }

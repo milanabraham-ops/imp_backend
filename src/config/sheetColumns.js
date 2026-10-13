@@ -171,7 +171,7 @@ const COLUMNS = [
   // Redacted deliberately — this holds real PMS login credentials, encrypted at rest in Mongo
   // specifically so they aren't sitting in plaintext anywhere. Pushing the decrypted value into
   // the Sheet (a much less access-controlled surface than the app itself) would undo that.
-  { header: 'Integration Notes', get: (s) => (s.serverAccess ? '(stored securely in app — not exported)' : '') },
+  { header: 'Integration Notes', get: (s) => (s.serverAccess ? '(stored securely in app, not exported)' : '') },
 
   // Tracking — filled manually by the implementation team, not by the form
   { header: 'Completion Date', manual: true, get: () => '' },

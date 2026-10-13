@@ -12,6 +12,13 @@ const sessionSchema = new Schema(
   {
     userId: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     tokenVersion: { type: Number, default: 0 },
+    // One rotation's worth of grace for reusing the just-rotated-out token (see authController's
+    // refresh handler) — multiple tabs of the same browser share this one session/cookie, so two
+    // tabs refreshing within moments of each other (a backgrounded tab's delayed timer firing right
+    // as another tab also refreshes, or simply both tabs' independent proactive timers landing
+    // close together) is an ordinary race, not a stolen/replayed token. Null outside that window.
+    previousTokenVersion: { type: Number, default: null },
+    previousTokenVersionExpiresAt: { type: Date, default: null },
     userAgent: { type: String, default: '' },
     ip: { type: String, default: '' },
     lastUsedAt: { type: Date, default: Date.now },

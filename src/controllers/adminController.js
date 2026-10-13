@@ -166,7 +166,7 @@ exports.resetPassword = async (req, res, next) => {
       targetType: 'User',
       targetId: user._id,
       targetLabel: `${user.name} (${user.email})`,
-      summary: `Reset ${user.name}'s password to the default — forced to change it on next login`,
+      summary: `Reset ${user.name}'s password to the default, forced to change it on next login`,
     })
   } catch (err) {
     if (err.name === 'CastError') return res.status(400).json({ error: 'Invalid user id' })

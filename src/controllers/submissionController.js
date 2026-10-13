@@ -221,6 +221,19 @@ function stripForeignOwnershipEdits(submission, updates, requesterName, requeste
   return out
 }
 
+// Once an integration ticket exists, pms is locked to whoever originally submitted the request —
+// including admin, unlike every other ownership rule in this file (see the early admin return
+// above). Integration work may already be underway against the current PMS value; letting anyone
+// else change it later would silently relabel that in-flight ticket with no record of what it
+// actually started against. The owner can still fix their own mistake at any time.
+function stripLockedPmsEdit(submission, updates, requesterId) {
+  if (updates.pms === undefined) return updates
+  if (!submission.integrationTicketCreatedAt) return updates
+  if (String(submission.owner) === String(requesterId)) return updates
+  const { pms: _pms, ...rest } = updates
+  return rest
+}
+
 function submissionLabel(submission) {
   return `${submission.clientName || 'Untitled'} - ${submission.locationName || 'Untitled location'}`
 }
@@ -562,7 +575,8 @@ exports.update = async (req, res, next) => {
     const submission = await Submission.findOne(filter)
     if (!submission) return res.status(404).json({ error: 'Submission not found' })
 
-    const updates = stripForeignOwnershipEdits(submission, fieldsForRole(req.user.role, req.body), req.user.name, req.user.role)
+    let updates = stripForeignOwnershipEdits(submission, fieldsForRole(req.user.role, req.body), req.user.name, req.user.role)
+    updates = stripLockedPmsEdit(submission, updates, req.user._id)
     // No "move to a different group" feature exists — group is only ever set at creation. Stripped
     // here rather than in stripProtectedFields since create() needs that same field to survive.
     delete updates.group
@@ -741,12 +755,14 @@ exports.addComment = async (req, res, next) => {
     }
 
     const text = req.body.text.trim()
+    const section = (req.body.section || '').trim() || null
     const mentions = await resolveMentions(text)
     submission.comments.push({
       authorId: req.user._id,
       authorName: req.user.name,
       authorRole: req.user.role,
       text,
+      section,
       notifyUserId,
       mentions,
     })
