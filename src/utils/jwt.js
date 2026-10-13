@@ -46,4 +46,4 @@ function verifyRefreshToken(token) {
   return jwt.verify(token, getRefreshSecret(), { algorithms: [ALGORITHM] })
 }
 
-module.exports = { signAccessToken, verifyAccessToken, signRefreshToken, verifyRefreshToken }
+module.exports = { signAccessToken, verifyAccessToken, signRefreshToken, verifyRefreshToken, getRefreshSecret }

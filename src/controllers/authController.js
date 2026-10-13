@@ -4,8 +4,8 @@ const User = require('../models/User')
 const Session = require('../models/Session')
 const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../utils/jwt')
 const { validatePassword } = require('../utils/passwordPolicy')
-const { REFRESH_COOKIE_NAME, refreshCookieOptions, csrfCookieOptions } = require('../utils/cookies')
-const { generateCsrfToken } = require('../middleware/csrf')
+const { REFRESH_COOKIE_NAME, refreshCookieOptions, staleCsrfCookieOptions } = require('../utils/cookies')
+const { deriveCsrfToken } = require('../middleware/csrf')
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_OAUTH_CLIENT_ID)
 
@@ -26,32 +26,22 @@ function toPublicUser(user) {
   }
 }
 
-// Starts (or renews) a session: sets the HttpOnly refresh cookie and a matching, JS-readable CSRF
-// cookie (the frontend reads this straight out of document.cookie when it needs to echo it back
-// as a header — no need to also carry it through the response body), and returns the short-lived
-// access token + user payload. Every place a session actually begins or rotates (login, Google
-// sign-in, refresh) goes through this so the cookie/token pairing can never drift out of sync.
-// csrfToken used to be scoped to Path=/api/auth (a since-fixed bug — that made it invisible to
-// document.cookie on the frontend's own pages). Browsers never overwrite a cookie set at a
-// different Path, so anyone who logged in before the fix still has that stale copy sitting
-// alongside the corrected one; browsers send the more specific path first, and the first one
-// wins server-side, so the stale copy would otherwise keep beating the current one forever.
-// Explicitly clearing the old path here self-heals every affected session on its next login.
-function clearStaleCsrfCookie(res) {
-  res.clearCookie('csrfToken', { path: '/api/auth' })
-}
-
+// Starts (or renews) a session: sets the HttpOnly refresh cookie and returns the short-lived access
+// token + user payload + a csrfToken the frontend must echo back as a header on /auth/refresh and
+// /auth/logout (see middleware/csrf.js — it's derived from the refresh token itself, not a second
+// cookie, specifically so it still works with frontend and backend on different domains). Every
+// place a session actually begins or rotates (login, Google sign-in, refresh) goes through this so
+// the cookie/csrfToken pairing can never drift out of sync.
 function issueSession(res, user, session) {
-  res.cookie(REFRESH_COOKIE_NAME, signRefreshToken(session), refreshCookieOptions())
-  clearStaleCsrfCookie(res)
-  res.cookie('csrfToken', generateCsrfToken(), csrfCookieOptions())
-  return { token: signAccessToken(user), user: toPublicUser(user) }
+  const refreshToken = signRefreshToken(session)
+  res.cookie(REFRESH_COOKIE_NAME, refreshToken, refreshCookieOptions())
+  res.clearCookie('csrfToken', staleCsrfCookieOptions())
+  return { token: signAccessToken(user), user: toPublicUser(user), csrfToken: deriveCsrfToken(refreshToken) }
 }
 
 function clearSessionCookies(res) {
   res.clearCookie(REFRESH_COOKIE_NAME, refreshCookieOptions())
-  res.clearCookie('csrfToken', csrfCookieOptions())
-  clearStaleCsrfCookie(res)
+  res.clearCookie('csrfToken', staleCsrfCookieOptions())
 }
 
 // A brand-new device/browser logging in (login, Google sign-in) gets its own fresh Session

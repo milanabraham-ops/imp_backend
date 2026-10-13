@@ -24,10 +24,10 @@ const OWNER_ROLES = ['poc', 'admin']
 // Account Onboarded belongs to whoever is actually doing the account at the time (specialist
 // while configuring, QA during review), not just QA — so both can set it.
 // Integration work (hooking a location's PMS up to the phone system) has no specialist/QA split —
-// anyone but a POC can pick one up, so both roles get the same two fields. forwardingNumbers is
-// here too (not gated like the rest) purely so specialist/qa can reach it through this same PATCH
-// — a POC already can, since it's never stripped as a tracking field for them (see
-// stripTrackingFields) and admin gets everything regardless.
+// anyone but a POC can pick one up, so both roles get the same two fields. forwardingNumbers and
+// forwardingNumberRequired are here too (not gated like the rest) purely so specialist/qa can reach
+// them through this same PATCH — a POC already can, since neither is ever stripped as a tracking
+// field for them (see stripTrackingFields) and admin gets everything regardless.
 const TRACKING_FIELDS_BY_ROLE = {
   specialist: [
     'configurationStatus',
@@ -37,6 +37,7 @@ const TRACKING_FIELDS_BY_ROLE = {
     'integrationStatus',
     'integrationAgent',
     'forwardingNumbers',
+    'forwardingNumberRequired',
   ],
   qa: [
     'configurationStatus',
@@ -48,6 +49,7 @@ const TRACKING_FIELDS_BY_ROLE = {
     'integrationStatus',
     'integrationAgent',
     'forwardingNumbers',
+    'forwardingNumberRequired',
   ],
 }
 const MANUAL_TRACKING_FIELDS = ['accountOnboarded', 'configurationStatus', 'implementationSpecialist']

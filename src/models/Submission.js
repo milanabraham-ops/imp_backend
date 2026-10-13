@@ -281,6 +281,11 @@ const submissionSchema = new Schema(
     // digits only (see utils/phoneNumber.js), so "(555) 123-4567" and "555-123-4567" typed on
     // separate lines collapse to one rather than both being kept.
     forwardingNumbers: { type: String, default: '' },
+    // Whether this account actually needs its numbers forwarded — defaults off so a brand new
+    // practice doesn't automatically clutter the Forwarding Numbers page (see
+    // ForwardingNumbersPage.jsx, which only lists submissions where this is true) before anyone's
+    // actually confirmed it needs that setup; flipped on later once it's actually needed.
+    forwardingNumberRequired: { type: Boolean, default: false },
 
     // App-only — a standing snapshot of the most recent audit-log entry for this submission
     // (see utils/auditLog.js), kept in sync with every logged action. The full audit log is
