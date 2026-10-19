@@ -13,4 +13,13 @@ const changePasswordSchema = z.object({
   newPassword: z.string().min(8, 'New password must be at least 8 characters'),
 })
 
-module.exports = { loginSchema, changePasswordSchema }
+const forgotPasswordSchema = z.object({
+  email: z.string().trim().min(1, 'Email is required').email('Invalid email address'),
+})
+
+const resetPasswordSchema = z.object({
+  email: z.string().trim().min(1, 'Email is required').email('Invalid email address'),
+  newPassword: z.string().min(8, 'New password must be at least 8 characters'),
+})
+
+module.exports = { loginSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema }

@@ -22,6 +22,7 @@ router.use(requireAuth)
 
 router.post('/', validateBody(createSubmissionSchema), ctrl.create)
 router.get('/', ctrl.list)
+router.post('/forwarding-numbers/export', ctrl.exportForwardingNumbers)
 router.get('/:id', ctrl.getById)
 router.patch('/:id', validateBody(updateSubmissionSchema), ctrl.update)
 router.post('/:id/handover', ctrl.handover)

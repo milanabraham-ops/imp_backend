@@ -4,10 +4,21 @@ const Session = require('../models/Session')
 const { logAction } = require('../utils/auditLog')
 
 const ROLES = ['poc', 'specialist', 'qa', 'admin']
-// Every admin-created account starts with this same password (not one the admin picks) — the
+// Every admin-created account starts with this same password (not one the admin picks), the
 // account is forced to change it on first login (see mustChangePassword), so there's no real
 // value in the admin choosing a one-off temporary password each time.
 const DEFAULT_PASSWORD = '12345678'
+
+// New accounts are restricted to the company domain, with one named, pre-existing exception
+// (John's account predates this rule and stays on his personal Gmail). Only gates account
+// creation, an email can never be changed after that, so this is the one place it needs checking.
+const ALLOWED_EMAIL_DOMAIN = '@voicestack.com'
+const GRANDFATHERED_EMAILS = ['john@gmail.com']
+
+function isAllowedEmail(email) {
+  const normalized = (email || '').toLowerCase().trim()
+  return normalized.endsWith(ALLOWED_EMAIL_DOMAIN) || GRANDFATHERED_EMAILS.includes(normalized)
+}
 
 function toPublicUser(user) {
   return {
@@ -41,6 +52,9 @@ exports.createUser = async (req, res, next) => {
     }
     if (role && !ROLES.includes(role)) {
       return res.status(400).json({ error: `Role must be one of: ${ROLES.join(', ')}` })
+    }
+    if (!isAllowedEmail(email)) {
+      return res.status(400).json({ error: `Email must be a ${ALLOWED_EMAIL_DOMAIN} address` })
     }
 
     const existing = await User.findOne({ email: email.toLowerCase().trim() })

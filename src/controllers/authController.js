@@ -6,6 +6,7 @@ const { signAccessToken, signRefreshToken, verifyRefreshToken } = require('../ut
 const { validatePassword } = require('../utils/passwordPolicy')
 const { REFRESH_COOKIE_NAME, refreshCookieOptions, staleCsrfCookieOptions } = require('../utils/cookies')
 const { deriveCsrfToken } = require('../middleware/csrf')
+const { logAction } = require('../utils/auditLog')
 
 const googleClient = new OAuth2Client(process.env.GOOGLE_OAUTH_CLIENT_ID)
 
@@ -307,6 +308,29 @@ exports.me = async (req, res, next) => {
   }
 }
 
+// Shared by changePassword and resetPassword below, every other difference between those two
+// (verifying the caller actually knows the current password, how the account gets looked up, what
+// happens to sessions afterward) stays with each of them. Checks the new password isn't the
+// current one or any of the last 5 the account's used, and if it's genuinely new, rotates it onto
+// the user, caller still needs to save().
+async function rotatePasswordHash(user, newPassword) {
+  const reused = await bcrypt.compare(newPassword, user.passwordHash)
+  if (reused) return 'New password must be different from your current password'
+
+  for (const oldHash of user.previousPasswordHashes) {
+    if (await bcrypt.compare(newPassword, oldHash)) {
+      return "You've used that password before, please choose a new one"
+    }
+  }
+
+  // Most-recent-first, capped at the last 5, enough to block "cycle back to what I just had"
+  // without keeping an unbounded history of a user's password hashes forever.
+  user.previousPasswordHashes = [user.passwordHash, ...user.previousPasswordHashes].slice(0, 5)
+  user.passwordHash = await bcrypt.hash(newPassword, 10)
+  user.mustChangePassword = false
+  return null
+}
+
 // Only path off the forced mustChangePassword state, requires the current password too (not
 // just a valid session token) so a compromised/left-open session can't silently take over the
 // account by changing the password without knowing it.
@@ -323,20 +347,8 @@ exports.changePassword = async (req, res, next) => {
     const valid = await bcrypt.compare(currentPassword, user.passwordHash)
     if (!valid) return res.status(401).json({ error: 'Current password is incorrect' })
 
-    const reused = await bcrypt.compare(newPassword, user.passwordHash)
-    if (reused) return res.status(400).json({ error: 'New password must be different from your current password' })
-
-    for (const oldHash of user.previousPasswordHashes) {
-      if (await bcrypt.compare(newPassword, oldHash)) {
-        return res.status(400).json({ error: "You've used that password before, please choose a new one" })
-      }
-    }
-
-    // Most-recent-first, capped at the last 5, enough to block "cycle back to what I just had"
-    // without keeping an unbounded history of a user's password hashes forever.
-    user.previousPasswordHashes = [user.passwordHash, ...user.previousPasswordHashes].slice(0, 5)
-    user.passwordHash = await bcrypt.hash(newPassword, 10)
-    user.mustChangePassword = false
+    const reuseError = await rotatePasswordHash(user, newPassword)
+    if (reuseError) return res.status(400).json({ error: reuseError })
     await user.save()
 
     // A password change should end every session on this account, on every device, revoke them
@@ -345,6 +357,64 @@ exports.changePassword = async (req, res, next) => {
     const session = await createSession(req, user)
 
     res.json(issueSession(res, user, session))
+  } catch (err) {
+    next(err)
+  }
+}
+
+// POST /auth/forgot-password: public, no login required (there's nothing to authenticate with
+// yet). Deliberately simple by the user's own explicit choice over setting up outbound email: the
+// only check is "does this email belong to a resettable (local, password-based) account", no side
+// channel/link/code at all. That means knowing someone's email is enough to reset their password,
+// a real tradeoff against a true verified-reset flow, accepted here in exchange for not needing
+// SMTP. authRateLimit (5/min/IP) is the only real brake on abuse.
+exports.forgotPassword = async (req, res, next) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase()
+    const user = await User.findOne({ email })
+    if (!user || user.authProvider !== 'local' || !user.passwordHash) {
+      return res.status(404).json({ error: 'No resettable account found with that email' })
+    }
+    res.json({ ok: true })
+  } catch (err) {
+    next(err)
+  }
+}
+
+// POST /auth/reset-password: public, no login required. Re-checks the email exactly like
+// forgotPassword (this isn't gated behind that call actually having happened first, there's no
+// token linking the two steps, just the same email check twice), then sets the new password
+// directly. Same reuse/complexity checks and same "every session ends" behavior as the logged-in
+// changePassword above, logged clearly as self-service (not an admin action) so anyone reviewing
+// the audit log can tell the two apart.
+exports.resetPassword = async (req, res, next) => {
+  try {
+    const email = (req.body.email || '').trim().toLowerCase()
+    const newPassword = req.body.newPassword || ''
+
+    const policyError = validatePassword(newPassword)
+    if (policyError) return res.status(400).json({ error: policyError })
+
+    const user = await User.findOne({ email })
+    if (!user || user.authProvider !== 'local' || !user.passwordHash) {
+      return res.status(404).json({ error: 'No resettable account found with that email' })
+    }
+
+    const reuseError = await rotatePasswordHash(user, newPassword)
+    if (reuseError) return res.status(400).json({ error: reuseError })
+    await user.save()
+    await Session.updateMany({ userId: user._id, revokedAt: null }, { revokedAt: new Date() })
+
+    res.json({ ok: true })
+
+    logAction({
+      actor: user,
+      action: 'auth.self_service_password_reset',
+      targetType: 'User',
+      targetId: user._id,
+      targetLabel: `${user.name} (${user.email})`,
+      summary: `Reset their own password via "Forgot password" (no email verification), every existing session was signed out`,
+    })
   } catch (err) {
     next(err)
   }

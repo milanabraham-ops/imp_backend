@@ -247,6 +247,14 @@ const submissionSchema = new Schema(
     // errors/clarifications get attached to the completion notification in Chat.
     qaChecklist: { type: [qaChecklistItemSchema], default: () => [] },
 
+    // App-only. A clarification item is a question for whoever configured the account, not a
+    // defect, so it shouldn't block completion forever the way an error does, but it also
+    // shouldn't let QA silently wave it through on the very first pass before anyone's actually
+    // answered it. Set true the first time a review is saved with a clarification (or error) still
+    // outstanding (see submissionController.update); true unblocks a clarification-only completion
+    // on the next attempt, cleared back to false once that completion actually goes through.
+    qaClarificationSeen: { type: Boolean, default: false },
+
     // App-only, whatever configurationStatus was right before "On Hold" was set, so "Resume"
     // can restore it exactly (Not Started/In Progress for a specialist-side hold, QA for a
     // QA-side hold). Cleared back to '' once resumed.

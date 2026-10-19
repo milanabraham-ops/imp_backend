@@ -4,10 +4,12 @@ const requireAuth = require('../middleware/requireAuth')
 const { requireCsrf } = require('../middleware/csrf')
 const { authRateLimit } = require('../middleware/rateLimit')
 const { validateBody } = require('../middleware/validate')
-const { loginSchema, changePasswordSchema } = require('../validators/authValidators')
+const { loginSchema, changePasswordSchema, forgotPasswordSchema, resetPasswordSchema } = require('../validators/authValidators')
 
 router.post('/login', authRateLimit, validateBody(loginSchema), ctrl.login)
 router.post('/google', authRateLimit, ctrl.google)
+router.post('/forgot-password', authRateLimit, validateBody(forgotPasswordSchema), ctrl.forgotPassword)
+router.post('/reset-password', authRateLimit, validateBody(resetPasswordSchema), ctrl.resetPassword)
 // Both rely on the refresh cookie as their actual credential — CSRF-protected via the
 // double-submit check instead of requireAuth, since the access token may already be expired by
 // the time either of these is called (that's the normal case for refresh, and a valid reason to

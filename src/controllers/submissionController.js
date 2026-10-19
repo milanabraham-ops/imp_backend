@@ -528,6 +528,47 @@ exports.list = async (req, res, next) => {
   }
 }
 
+// A practice's forwardingNumbers is one free-text field that can hold several numbers at once,
+// typically one per line, but some were entered as a single line with commas between them instead.
+// Splitting on both means either style (or a mix of both in the same field) comes out the same.
+function splitForwardingNumbers(raw) {
+  return (raw || '')
+    .split(/[\n,]+/)
+    .map((n) => n.trim())
+    .filter(Boolean)
+}
+
+// ForwardingNumbersPage's own export: the frontend already knows which rows are currently
+// visible/selected (its date-range and search filters, same data this endpoint would otherwise
+// have to re-derive), so it just sends the ids and this pulls the one field it actually needs from
+// each, flattens every practice's numbers into one plain list, and returns it as a real .xlsx, one
+// number per row, nothing else, not even a header, exactly what the user asked for.
+exports.exportForwardingNumbers = async (req, res, next) => {
+  try {
+    const ids = Array.isArray(req.body.ids) ? req.body.ids : []
+    if (ids.length === 0) return res.status(400).json({ error: 'No accounts selected' })
+
+    const filter =
+      req.user.role === 'poc'
+        ? { _id: { $in: ids }, owner: req.user._id, group: null }
+        : { _id: { $in: ids } }
+    const submissions = await Submission.find(filter).select('forwardingNumbers')
+
+    const numbers = submissions.flatMap((s) => splitForwardingNumbers(s.forwardingNumbers))
+
+    const worksheet = XLSX.utils.aoa_to_sheet(numbers.map((n) => [n]))
+    const workbook = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Numbers')
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' })
+
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    res.setHeader('Content-Disposition', 'attachment; filename="forwarding-numbers.xlsx"')
+    res.send(buffer)
+  } catch (err) {
+    next(err)
+  }
+}
+
 exports.getById = async (req, res, next) => {
   try {
     const filter = req.user.role === 'poc' ? { _id: req.params.id, owner: req.user._id } : { _id: req.params.id }
@@ -593,16 +634,39 @@ exports.update = async (req, res, next) => {
       return res.status(403).json({ error: 'You are not allowed to edit this' })
     }
 
-    // A review with any item still flagged error/clarification isn't actually done, completing it
-    // anyway would silently drop those flags on the floor instead of sending them back to get
-    // fixed. Checked against whatever checklist this same request is saving (the normal case, QA's
-    // own "Mark Complete" always resends its current checklist alongside the status) or, failing
-    // that, whatever's already on the submission, never against the client's claim alone.
-    if (normalizeStatus(updates.configurationStatus) === 'COMPLETED') {
+    // A review with any item still flagged as an actual error isn't actually done, completing it
+    // anyway would silently drop that flag on the floor instead of sending it back to get fixed,
+    // an error always blocks, no matter how many times this has been reviewed. Clarification is
+    // different, it's a question for whoever configured it to answer, not a defect, so it only
+    // blocks the FIRST time it's seen (giving them a chance to actually answer it before this goes
+    // any further), not every time, qaClarificationSeen (set below) is what remembers that a round
+    // already went by with one outstanding. Checked against whatever checklist this same request
+    // is saving (the normal case, QA's own "Mark Complete" always resends its current checklist
+    // alongside the status) or, failing that, whatever's already on the submission.
+    if (updates.qaChecklist !== undefined || normalizeStatus(updates.configurationStatus) === 'COMPLETED') {
       const effectiveChecklist = updates.qaChecklist !== undefined ? updates.qaChecklist : submission.qaChecklist
-      const hasUnresolvedFlags = (effectiveChecklist || []).some((i) => i.status === 'error' || i.status === 'clarification')
-      if (hasUnresolvedFlags) {
-        return res.status(400).json({ error: 'This review still has unresolved errors/clarifications. It needs another look before it can be completed.' })
+      const hasUnresolvedErrors = (effectiveChecklist || []).some((i) => i.status === 'error')
+      const hasClarifications = (effectiveChecklist || []).some((i) => i.status === 'clarification')
+
+      if (normalizeStatus(updates.configurationStatus) === 'COMPLETED') {
+        if (hasUnresolvedErrors) {
+          return res.status(400).json({ error: 'This review still has unresolved errors. It needs another look before it can be completed.' })
+        }
+        if (hasClarifications && !submission.qaClarificationSeen) {
+          return res
+            .status(400)
+            .json({ error: 'This review has a clarification that needs a recheck first. Save it, then complete it on the next review.' })
+        }
+        // Completing clears it, a future reopen of this same account starts the "seen" tracking
+        // fresh rather than carrying forward a round that's long since finished.
+        updates.qaClarificationSeen = false
+      } else if (updates.qaChecklist !== undefined) {
+        // Saving the checklist without completing (the normal "blocked" outcome above, see
+        // usePipelineActions.js's saveWithUnresolvedFlags), remember that this round has now had
+        // at least one pass with something flagged, so the next completion attempt with only a
+        // clarification left can go through. Never set by the client directly (qaClarificationSeen
+        // isn't in any role's allowed fields), only computed here from the checklist content.
+        updates.qaClarificationSeen = hasUnresolvedErrors || hasClarifications || submission.qaClarificationSeen
       }
     }
 
