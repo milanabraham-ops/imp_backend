@@ -643,6 +643,7 @@ exports.update = async (req, res, next) => {
     // already went by with one outstanding. Checked against whatever checklist this same request
     // is saving (the normal case, QA's own "Mark Complete" always resends its current checklist
     // alongside the status) or, failing that, whatever's already on the submission.
+    let blockedWithFlags = false
     if (updates.qaChecklist !== undefined || normalizeStatus(updates.configurationStatus) === 'COMPLETED') {
       const effectiveChecklist = updates.qaChecklist !== undefined ? updates.qaChecklist : submission.qaChecklist
       const hasUnresolvedErrors = (effectiveChecklist || []).some((i) => i.status === 'error')
@@ -667,6 +668,10 @@ exports.update = async (req, res, next) => {
         // clarification left can go through. Never set by the client directly (qaClarificationSeen
         // isn't in any role's allowed fields), only computed here from the checklist content.
         updates.qaClarificationSeen = hasUnresolvedErrors || hasClarifications || submission.qaClarificationSeen
+        // Flags this as a save the specialist needs to actually act on, not a disinterested note,
+        // so it still reaches Chat below even though configurationStatus itself isn't changing
+        // (the card stays put in the QA column, only the checklist/message do).
+        blockedWithFlags = hasUnresolvedErrors || hasClarifications
       }
     }
 
@@ -738,6 +743,12 @@ exports.update = async (req, res, next) => {
       } else if (newStatus === 'COMPLETED' && req.body.qaResultMessage && req.body.qaResultMessage.trim()) {
         postToQaGroup(req.body.qaResultMessage.trim()).catch((err) => req.log.error({ err, submissionId: submission._id }, 'Failed to send QA result to Chat'))
       }
+    } else if (blockedWithFlags && req.body.qaResultMessage && req.body.qaResultMessage.trim()) {
+      // Mirrors the completion post above, but for a review that got bounced back with an error or
+      // an unanswered clarification instead of finishing (configurationStatus isn't in `updates` at
+      // all here, the card stays in QA). Chat is the only place the specialist would actually see
+      // this, the card gives no visible sign anything is flagged until they happen to reopen it.
+      postToQaGroup(req.body.qaResultMessage.trim()).catch((err) => req.log.error({ err, submissionId: submission._id }, 'Failed to send QA recheck note to Chat'))
     }
   } catch (err) {
     if (err.name === 'CastError') return res.status(400).json({ error: 'Invalid submission id' })
