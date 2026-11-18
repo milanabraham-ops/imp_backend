@@ -17,10 +17,16 @@ const fileRefSchema = new Schema(
 const qaChecklistItemSchema = new Schema(
   {
     item: { type: String, required: true },
-    // '' = not yet reviewed, 'ok' = no issue, 'error' = something's wrong (see note),
-    // 'clarification' = QA has a question about it (see note), 'na' = doesn't apply here.
+    // '' = not yet reviewed, 'ok' = no issue, 'na' = doesn't apply here. 'error' and
+    // 'clarification' are old values kept in the enum only so a submission saved before this
+    // changed still loads without a cast error; new rows never set status to either of those,
+    // they're independent flags below instead, since the same item can need both at once.
     status: { type: String, enum: ['', 'ok', 'error', 'clarification', 'na'], default: '' },
     note: { type: String, default: '' },
+    hasError: { type: Boolean, default: false },
+    errorNote: { type: String, default: '' },
+    hasClarification: { type: Boolean, default: false },
+    clarificationNote: { type: String, default: '' },
   },
   { _id: false },
 )

@@ -298,6 +298,17 @@ const TRACKED_FIELDS = new Set([
 // "before/after" value, so only the fact that it changed is recorded.
 const REDACTED_FIELDS = new Set(['serverAccess'])
 
+// A checklist row saved before error and clarification could both apply to the same item carried
+// a single status ('error'/'clarification') and one note; rows saved since use the independent
+// hasError/hasClarification flags instead (see models/Submission.js), checked for alongside the
+// old status so a submission that hasn't been touched since the change still blocks correctly.
+function rowHasError(row) {
+  return Boolean(row.hasError) || row.status === 'error'
+}
+function rowHasClarification(row) {
+  return Boolean(row.hasClarification) || row.status === 'clarification'
+}
+
 function serializeFieldChange(field, from, to) {
   if (REDACTED_FIELDS.has(field)) return { field, from: '[redacted]', to: '[redacted]' }
   if (typeof from === 'object' || typeof to === 'object') return { field, from: '[changed]', to: '[changed]' }
@@ -308,7 +319,7 @@ function describeStatusChange({ prev, next, isRecheck, hasQaHandoffMessage, subm
   const prevLabel = prev || 'Not Started'
   const nextNorm = normalizeStatus(next)
   if (nextNorm === 'COMPLETED') {
-    const flagged = (submission.qaChecklist || []).filter((i) => i.status === 'error' || i.status === 'clarification').length
+    const flagged = (submission.qaChecklist || []).filter((i) => rowHasError(i) || rowHasClarification(i)).length
     return `Marked QA complete${flagged ? ` (${flagged} item${flagged === 1 ? '' : 's'} flagged)` : ''}`
   }
   if (nextNorm === 'QA' && isRecheck) return 'Reopened for recheck (back to QA)'
@@ -646,8 +657,8 @@ exports.update = async (req, res, next) => {
     let blockedWithFlags = false
     if (updates.qaChecklist !== undefined || normalizeStatus(updates.configurationStatus) === 'COMPLETED') {
       const effectiveChecklist = updates.qaChecklist !== undefined ? updates.qaChecklist : submission.qaChecklist
-      const hasUnresolvedErrors = (effectiveChecklist || []).some((i) => i.status === 'error')
-      const hasClarifications = (effectiveChecklist || []).some((i) => i.status === 'clarification')
+      const hasUnresolvedErrors = (effectiveChecklist || []).some(rowHasError)
+      const hasClarifications = (effectiveChecklist || []).some(rowHasClarification)
 
       if (normalizeStatus(updates.configurationStatus) === 'COMPLETED') {
         if (hasUnresolvedErrors) {
